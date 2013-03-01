@@ -144,7 +144,7 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2>Detailed Description</h2>
 <div class="textblock"><p>This class installs a SEGFAULT signal handler to print a nice stack trace and (if requested) generate a core dump. </p>
-<p>In <a class="el" href="classDebug_1_1DeathHandler.html" title="This class installs a SEGFAULT signal handler to print a nice stack trace and (if requested) generate...">DeathHandler</a> constructor, a SEGFAULT signal handler is installed via sigaction(). If your program encounters a segmentation fault, the call stack is unwinded with backtrace(), converted into function names with line numbers via addr2line (fork() + execlp()). Addresses from shared libraries are also converted thanks to dladdr(). All C++ symbols are demangled. Printed stack trace includes the faulty thread id obtained with pthread_self() and each line contains the process id to distinguish several stack traces printed by different processes at the same time. </p>
+<p>In <a class="el" href="classDebug_1_1DeathHandler.html" title="This class installs a SEGFAULT signal handler to print a nice stack trace and (if requested) generate...">DeathHandler</a>'s constructor, a SEGFAULT signal handler is installed via sigaction(). If your program encounters a segmentation fault, the call stack is unwinded with backtrace(), converted into function names with line numbers via addr2line (fork() + execlp()). Addresses from shared libraries are also converted thanks to dladdr(). All C++ symbols are demangled. Printed stack trace includes the faulty thread id obtained with pthread_self() and each line contains the process id to distinguish several stack traces printed by different processes at the same time. </p>
 </div><h2>Member Function Documentation</h2>
 <a class="anchor" id="a663f2197efd746548208afe13f4b85ed"></a>
 <div class="memitem">
@@ -495,7 +495,7 @@ Default value of this property is true. </dd></dl>
 </div><!-- contents -->
 <!-- start footer part -->
 <hr class="footer"/><address class="footer"><small>
-Generated on Fri Mar 1 2013 10:05:03 for DeathHandler by &#160;<a href="http://www.doxygen.org/index.html">
+Generated on Fri Mar 1 2013 10:33:10 for DeathHandler by &#160;<a href="http://www.doxygen.org/index.html">
 <img class="footer" src="doxygen.png" alt="doxygen"/>
 </a> 1.8.1.2
 </small></address>

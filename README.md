@@ -22,3 +22,6 @@ int main() {
   return 0;
 }
 ~~~~
+
+This project is released under Simplified BSD License.
+Copyright 2012 Samsung R&D Institute Russia.
