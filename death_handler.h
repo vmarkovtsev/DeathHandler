@@ -17,6 +17,7 @@
  *    Debug::DeathHandler dh;
  *    int* p = NULL;
  *    *p = 0;
+ *    return 0;
  *  }
  *  ~~~~
  *
@@ -35,7 +36,7 @@ namespace Debug {
 
 /// @brief This class installs a SEGFAULT signal handler to print
 /// a nice stack trace and (if requested) generate a core dump.
-/// @details In DeathHandler constructor, a SEGFAULT signal handler
+/// @details In DeathHandler's constructor, a SEGFAULT signal handler
 /// is installed via sigaction(). If your program encounters a segmentation
 /// fault, the call stack is unwinded with backtrace(), converted into
 /// function names with line numbers via addr2line (fork() + execlp()).
