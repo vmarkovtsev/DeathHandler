@@ -23,5 +23,5 @@ int main() {
 }
 ~~~~
 
-This project is released under Simplified BSD License.
+This project is released under the Simplified BSD License.
 Copyright 2012 Samsung R&D Institute Russia.
