@@ -108,6 +108,7 @@ namespace Safe {
   }
 }  // namespace Safe
 
+const int DeathHandler::kMaxPathLength = 1024;
 bool DeathHandler::generateCoreDump_ = true;
 bool DeathHandler::cleanup_ = true;
 #ifdef QUICK_EXIT
@@ -355,9 +356,9 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
 #endif
 #endif
 
-  char name_buf[1024];
+  char name_buf[kMaxPathLength];
   name_buf[readlink("/proc/self/exe", name_buf, sizeof(name_buf) - 1)] = 0;
-  char cwd[1024];
+  char cwd[kMaxPathLength];
   assert(getcwd(cwd, sizeof(cwd)) != NULL);
   assert(static_cast<size_t>(strlen(cwd)) < sizeof(cwd) - 1);
   strcat(cwd, "/");  // NOLINT(runtime/printf)
@@ -367,6 +368,7 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
     char *line;
     Dl_info dlinf;
     if (dladdr(trace[i], &dlinf) == 0 ||
+        dlinf.dli_fname[0] != '/' ||
         !strcmp(name_buf, dlinf.dli_fname)) {
       line = addr2line(name_buf, trace[i]);
     } else {

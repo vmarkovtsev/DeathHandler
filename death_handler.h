@@ -191,6 +191,8 @@ class DeathHandler {
   void set_threadSafe(bool value);
 
  private:
+  static const int kMaxPathLength;
+
   static void SignalHandler(int sig, void* info,
                             void* secret);
 
