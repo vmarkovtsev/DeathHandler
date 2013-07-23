@@ -40,7 +40,7 @@
 #include "death_handler.h"
 #include <malloc.h>
 #include <gtest/gtest.h>
-#include <thread>  // NOLINT(build/include_order)
+//#include <thread>  // NOLINT(build/include_order)
 
 using Debug::DeathHandler;
 
@@ -62,7 +62,7 @@ TEST(DeathHandler, Simple) {
     SEGMENTATION_FAULT();
   }
   close(pipefd[1]);
-  wait(nullptr);
+  wait(NULL);
   char text[4096];
   int bytesRead;
   int totalBytesRead = 0;
@@ -71,33 +71,34 @@ TEST(DeathHandler, Simple) {
     totalBytesRead += bytesRead;
   }
   close(pipefd[0]);
-  auto posstr = strstr(text, "Segmentation fault");
-  ASSERT_NE(static_cast<char*>(nullptr), posstr);
+  printf("%s", text);
+  char* posstr = strstr(text, "Segmentation fault");
+  ASSERT_NE(static_cast<const char*>(NULL), posstr);
   posstr = strstr(text, "[DeathHandler_Simple_Test::TestBody()]");
-  ASSERT_NE(static_cast<char*>(nullptr), posstr);
-  posstr = strstr(text, "death_handler.cc");
-  ASSERT_NE(static_cast<char*>(nullptr), posstr);
+  ASSERT_NE(static_cast<const char*>(NULL), posstr);
+  posstr = strstr(text, "death_handler");
+  ASSERT_NE(static_cast<const char*>(NULL), posstr);
   // Warning: hard-coded line number
-  posstr = strstr(text, ":36");
-  ASSERT_NE(static_cast<char*>(nullptr), posstr);
+  posstr = strstr(text, ":38");
+  ASSERT_NE(static_cast<const char*>(NULL), posstr);
 }
 
 void *malloc_hook(size_t, const void*) {
-  __malloc_hook = nullptr;
-  __free_hook = nullptr;
+  __malloc_hook = NULL;
+  __free_hook = NULL;
   fprintf(stderr, "malloc() call detected\n");
   _Exit(EXIT_FAILURE);
 }
 
 void free_hook(void*, const void*) {
-  __malloc_hook = nullptr;
-  __free_hook = nullptr;
+  __malloc_hook = NULL;
+  __free_hook = NULL;
   fprintf(stderr, "free() call detected\n");
   _Exit(EXIT_FAILURE);
 }
 
 void cancel_malloc_hook() {
-  __malloc_hook = nullptr;
+  __malloc_hook = NULL;
 }
 
 void *memalign_hook(size_t, size_t, const void*) {
