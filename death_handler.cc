@@ -26,8 +26,8 @@
  */
 
 /*! @file death_handler.cc
- *  @brief Implementation of the SIGSEGV handler which prints the debug stack
- *  trace.
+ *  @brief Implementation of the SIGSEGV/SIGABRT handler which prints the debug
+ *  stack trace.
  *  @author Markovtsev Vadim <v.markovtsev@samsung.com>
  *  @version 1.0
  *  @license Simplified BSD License
@@ -55,7 +55,7 @@
 #pragma GCC poison malloc realloc free backtrace_symbols \
   printf fprintf sprintf snprintf scanf sscanf  // NOLINT(runtime/printf)
 
-#define checked(x) do { if ((x) <= 0) abort(); } while (false)
+#define checked(x) do { if ((x) <= 0) _Exit(EXIT_FAILURE); } while (false)
 
 namespace Debug {
 
@@ -109,17 +109,17 @@ namespace Safe {
 }  // namespace Safe
 
 const int DeathHandler::kMaxPathLength = 1024;
-bool DeathHandler::generateCoreDump_ = true;
+bool DeathHandler::generate_core_dump_ = true;
 bool DeathHandler::cleanup_ = true;
 #ifdef QUICK_EXIT
-bool DeathHandler::quickExit_ = false;
+bool DeathHandler::quick_exit_ = false;
 #endif
-int DeathHandler::framesCount_ = 16;
-bool DeathHandler::cutCommonPathRoot_ = true;
-bool DeathHandler::cutRelativePaths_ = true;
-bool DeathHandler::appendPid_ = false;
-bool DeathHandler::colorOutput_ = true;
-bool DeathHandler::threadSafe_ = true;
+int DeathHandler::frames_count_ = 16;
+bool DeathHandler::cut_common_path_root_ = true;
+bool DeathHandler::cut_relative_paths_ = true;
+bool DeathHandler::append_pid_ = false;
+bool DeathHandler::color_output_ = true;
+bool DeathHandler::thread_safe_ = true;
 
 DeathHandler::DeathHandler() {
   struct sigaction sa;
@@ -127,6 +127,7 @@ DeathHandler::DeathHandler() {
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART | SA_SIGINFO;
   sigaction(SIGSEGV, &sa, NULL);
+  sigaction(SIGABRT, &sa, NULL);
 }
 
 DeathHandler::~DeathHandler() {
@@ -134,14 +135,17 @@ DeathHandler::~DeathHandler() {
   sigaction(SIGSEGV, NULL, &sa);
   sa.sa_handler = SIG_DFL;
   sigaction(SIGSEGV, &sa, NULL);
+  sigaction(SIGABRT, NULL, &sa);
+  sa.sa_handler = SIG_DFL;
+  sigaction(SIGABRT, &sa, NULL);
 }
 
-bool DeathHandler::generateCoreDump() {
-  return generateCoreDump_;
+bool DeathHandler::generate_core_dump() {
+  return generate_core_dump_;
 }
 
-void DeathHandler::set_generateCoreDump(bool value) {
-  generateCoreDump_ = value;
+void DeathHandler::set_generate_core_dump(bool value) {
+  generate_core_dump_ = value;
 }
 
 bool DeathHandler::cleanup() {
@@ -153,62 +157,62 @@ void DeathHandler::set_cleanup(bool value) {
 }
 
 #ifdef QUICK_EXIT
-bool DeathHandler::quickExit() {
-  return quickExit_;
+bool DeathHandler::quick_exit() {
+  return quick_exit_;
 }
 
-void DeathHandler::set_quickExit(bool value) {
-  quickExit_ = value;
+void DeathHandler::set_quick_exit(bool value) {
+  quick_exit_ = value;
 }
 #endif
 
-int DeathHandler::framesCount() {
-  return framesCount_;
+int DeathHandler::frames_count() {
+  return frames_count_;
 }
 
-void DeathHandler::set_framesCount(int value) {
+void DeathHandler::set_frames_count(int value) {
   assert(value > 0 && value <= 100);
-  framesCount_ = value;
+  frames_count_ = value;
 }
 
-bool DeathHandler::cutCommonPathRoot() {
-  return cutCommonPathRoot_;
+bool DeathHandler::cut_common_path_root() {
+  return cut_common_path_root_;
 }
 
-void DeathHandler::set_cutCommonPathRoot(bool value) {
-  cutCommonPathRoot_ = value;
+void DeathHandler::set_cut_common_path_root(bool value) {
+  cut_common_path_root_ = value;
 }
 
-bool DeathHandler::cutRelativePaths() {
-  return cutRelativePaths_;
+bool DeathHandler::cut_relative_paths() {
+  return cut_relative_paths_;
 }
 
-void DeathHandler::set_cutRelativePaths(bool value) {
-  cutRelativePaths_ = value;
+void DeathHandler::set_cut_relative_paths(bool value) {
+  cut_relative_paths_ = value;
 }
 
-bool DeathHandler::appendPid() {
-  return appendPid_;
+bool DeathHandler::append_pid() {
+  return append_pid_;
 }
 
-void DeathHandler::set_appendPid(bool value) {
-  appendPid_ = value;
+void DeathHandler::set_append_pid(bool value) {
+  append_pid_ = value;
 }
 
-bool DeathHandler::colorOutput() {
-  return colorOutput_;
+bool DeathHandler::color_output() {
+  return color_output_;
 }
 
-void DeathHandler::set_colorOutput(bool value) {
-  colorOutput_ = value;
+void DeathHandler::set_color_output(bool value) {
+  color_output_ = value;
 }
 
-bool DeathHandler::threadSafe() {
-  return threadSafe_;
+bool DeathHandler::thread_safe() {
+  return thread_safe_;
 }
 
-void DeathHandler::set_threadSafe(bool value) {
-  threadSafe_ = value;
+void DeathHandler::set_thread_safe(bool value) {
+  thread_safe_ = value;
 }
 
 /// @brief Invokes addr2line utility to determine the function name
@@ -270,14 +274,14 @@ static void* MallocHook(size_t size,
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
-void DeathHandler::SignalHandler(int sig __attribute__((unused)),
+void DeathHandler::SignalHandler(int sig,
                                  void *info __attribute__((unused)),
                                  void *secret) {
   // Stop all other running threads by forking
   pid_t forkedPid = fork();
   if (forkedPid != 0) {
     int status;
-    if (threadSafe_) {
+    if (thread_safe_) {
       // Freeze the original process, until it's child prints the stack trace
       kill(getpid(), SIGSTOP);
       // Wait for the child without blocking and exit as soon as possible,
@@ -290,11 +294,15 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
       waitpid(forkedPid, &status, 0);
     }
 #ifdef QUICK_EXIT
-    if (quickExit_) {
-      quick_exit(EXIT_FAILURE);
+    if (quick_exit_) {
+      ::quick_exit(EXIT_FAILURE);
     }
 #endif
-    if (generateCoreDump_) {
+    if (generate_core_dump_) {
+      struct sigaction sa;
+      sigaction(SIGABRT, NULL, &sa);
+      sa.sa_handler = SIG_DFL;
+      sigaction(SIGABRT, &sa, NULL);
       abort();
     } else {
       if (cleanup_) {
@@ -312,10 +320,22 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
   }
   {
     static char msg[128];
-    if (colorOutput_) {
+    if (color_output_) {
       // \033[31;1mSegmentation fault\033[0m \033[33;1m(%i)\033[0m\n
-      strcpy(msg,  // NOLINT(runtime/printf)
-             "\033[31;1mSegmentation fault\033[0m (thread \033[33;1m");
+      strcpy(msg, "\033[31;1m");  // NOLINT(runtime/printf)
+      switch (sig) {
+        case SIGSEGV:
+          strcat(msg, "Segmentation fault");  // NOLINT(runtime/printf)
+          break;
+        case SIGABRT:
+          strcat(msg, "Aborted");  // NOLINT(runtime/printf)
+          break;
+        default:
+          strcat(msg, "Caught signal ");  // NOLINT(runtime/printf)
+          strcat(msg, Safe::itoa(sig));  // NOLINT(runtime/printf)
+          break;
+      }
+      strcat(msg, "\033[0m (thread \033[33;1m");  // NOLINT(runtime/printf)
       strcat(msg, Safe::utoa(pthread_self()));  // NOLINT(runtime/printf)
       strcat(msg, "\033[0m, pid \033[33;1m");  // NOLINT(runtime/printf)
       strcat(msg, Safe::itoa(getppid()));  // NOLINT(runtime/printf)
@@ -331,16 +351,22 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
   }
 
   Safe::print2stderr("\nStack trace:\n");
-  void *trace[framesCount_ + 2];
+  void *trace[frames_count_ + 2];
   // Workaround malloc() inside backtrace()
   void* (*oldMallocHook)(size_t, const void*) = __malloc_hook;
   void (*oldFreeHook)(void *, const void *) = __free_hook;
   __malloc_hook = MallocHook;
   __free_hook = NULL;
-  int trace_size = backtrace(trace, framesCount_ + 2);
+  int trace_size = backtrace(trace, frames_count_ + 2);
   __malloc_hook = oldMallocHook;
   __free_hook = oldFreeHook;
-  if (trace_size <= 2) abort();
+  if (trace_size <= 2) {
+    struct sigaction sa;
+    sigaction(SIGABRT, NULL, &sa);
+    sa.sa_handler = SIG_DFL;
+    sigaction(SIGABRT, &sa, NULL);
+    abort();
+  }
 
   // Overwrite sigaction with caller's address
 #if defined(__arm__)
@@ -384,25 +410,25 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
         // "\033[34;1m[%s]\033[0m \033[33;1m(%i)\033[0m\n
         static char msg[512];
         msg[0] = 0;
-        if (colorOutput_) {
+        if (color_output_) {
           strcpy(msg, "\033[34;1m");  // NOLINT(runtime/printf)
         }
         strcat(msg, "[");  // NOLINT(runtime/printf)
         strcat(msg, line);  // NOLINT(runtime/printf)
         strcat(msg, "]");  // NOLINT(runtime/printf)
-        if (appendPid_) {
-          if (colorOutput_) {
+        if (append_pid_) {
+          if (color_output_) {
             strcat(msg, "\033[0m\033[33;1m");  // NOLINT(runtime/printf)
           }
           strcat(msg, " (");  // NOLINT(runtime/printf)
           strcat(msg, Safe::itoa(getppid()));  // NOLINT(runtime/printf)
           strcat(msg, ")");  // NOLINT(runtime/printf)
-          if (colorOutput_) {
+          if (color_output_) {
             strcat(msg, "\033[0m");  // NOLINT(runtime/printf)
           }
           strcat(msg, "\n");  // NOLINT(runtime/printf)
         } else {
-          if (colorOutput_) {
+          if (color_output_) {
             strcat(msg, "\033[0m");  // NOLINT(runtime/printf)
           }
           strcat(msg, "\n");  // NOLINT(runtime/printf)
@@ -412,16 +438,19 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
       line = functionNameEnd + 1;
 
       // Remove the common path root
-      if (cutCommonPathRoot_) {
+      if (cut_common_path_root_) {
         int cpi;
-        for (cpi = 0; cwd[cpi] == line[cpi]; cpi++);
+        for (cpi = 0; cwd[cpi] == line[cpi]; cpi++) {};
+        if (line[cpi - 1] != '/') {
+          for (cpi; line[cpi - 1] != '/'; cpi--) {};
+        }
         if (cpi > 1) {
           line = line + cpi;
         }
       }
 
       // Remove relative path root
-      if (cutRelativePaths_) {
+      if (cut_relative_paths_) {
         char *pathCutPos = strstr(line, "../");
         if (pathCutPos != NULL) {
           pathCutPos += 3;
@@ -433,7 +462,7 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
       }
 
       // Mark line number
-      if (colorOutput_) {
+      if (color_output_) {
         char* numberPos = strstr(line, ":");
         if (numberPos != NULL) {
           static char lineNumber[128];
@@ -452,16 +481,16 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
     line[strlen(line) - 1] = 0;
 
     // Append pid
-    if (appendPid_) {
+    if (append_pid_) {
       // %s\033[33;1m(%i)\033[0m\n
       strcat(line, " ");  // NOLINT(runtime/printf)
-      if (colorOutput_) {
+      if (color_output_) {
         strcat(line, "\033[33;1m");  // NOLINT(runtime/printf)
       }
       strcat(line, "(");  // NOLINT(runtime/printf)
       strcat(line, Safe::itoa(getppid()));  // NOLINT(runtime/printf)
       strcat(line, ")");  // NOLINT(runtime/printf)
-      if (colorOutput_) {
+      if (color_output_) {
         strcat(line, "\033[0m");  // NOLINT(runtime/printf)
       }
     }
@@ -470,7 +499,7 @@ void DeathHandler::SignalHandler(int sig __attribute__((unused)),
     Safe::print2stderr(line);
   }
 
-  if (threadSafe_) {
+  if (thread_safe_) {
     // Resume the parent process
     kill(getppid(), SIGCONT);
   }

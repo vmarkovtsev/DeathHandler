@@ -1,4 +1,4 @@
-DeathHandler class installs a SEGFAULT signal handler to print
+DeathHandler class installs SEGFAULT and SIGABRT signal handlers to print
 a nice stack trace and (if requested) generate a core dump.
 In DeathHandler's constructor, a SEGFAULT signal handler
 is installed via sigaction(). If your program encounters a segmentation

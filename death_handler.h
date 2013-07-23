@@ -26,7 +26,7 @@
  */
 
 /*! @file death_handler.h
- *  @brief Declaration of the SIGSEGV handler which prints the debug stack
+ *  @brief Declaration of the SIGSEGV/SIGABRT handler which prints the debug stack
  *  trace.
  *  @author Markovtsev Vadim <v.markovtsev@samsung.com>
  *  @version 1.0
@@ -34,7 +34,7 @@
  *  @copyright 2012 Samsung R&D Institute Russia
  */
  
-/*! @mainpage SIGSEGV handler which prints the debug stack trace.
+/*! @mainpage SIGSEGV/SIGABRT handler which prints the debug stack trace.
  *  Example
  *  =======
  *  ~~~~{.cc}
@@ -74,121 +74,121 @@ namespace Debug {
 /// the same time.
 class DeathHandler {
  public:
-  /// @brief Installs the SIGSEGV signal handler.
+  /// @brief Installs the SIGSEGV/SIGABRT signal handler.
   DeathHandler();
   /// @brief This is called on normal program termination. Previously installed
-  /// SIGSEGV signal handler is removed.
+  /// SIGSEGV and SIGABRT signal handlers are removed.
   ~DeathHandler();
 
   /// @brief Sets the value of cleanup property.
   /// @details If cleanup is set to true, program attempts to run all static
   /// destructors and atexit() callbacks before terminating. If
-  /// generateCoreDump is set to true, this property is ignored.
+  /// generate_core_dump is set to true, this property is ignored.
   /// @note Default value of this property is true.
   bool cleanup();
 
   /// @brief Returns the value of cleanup property.
   /// @details If cleanup is set to true, program attempts to run all static
   /// destructors and atexit() callbacks before terminating. If
-  /// generateCoreDump is set to true, this property is ignored.
+  /// generate_core_dump is set to true, this property is ignored.
   /// @note Default value of this property is true.
   void set_cleanup(bool value);
 
-  /// @brief Returns the current value of generateCoreDump property.
-  /// @details If generateCoreDump is set to true, a core dump will
+  /// @brief Returns the current value of generate_core_dump property.
+  /// @details If generate_core_dump is set to true, a core dump will
   /// be generated when the program terminates. This behavior
   /// is implemented using abort(). cleanup property is ignored.
   /// @note You need to set ulimit to a value different from the default 0
   /// (for example, "ulimit -c unlimited") to enable core dumps generation
   /// on your system.
   /// @note Default value of this property is true.
-  bool generateCoreDump();
+  bool generate_core_dump();
 
-  /// @brief Sets the value of generateCoreDump property.
-  /// @details If generateCoreDump is set to true, a core dump will
+  /// @brief Sets the value of generate_core_dump property.
+  /// @details If generate_core_dump is set to true, a core dump will
   /// be generated when the program terminates. This behavior
   /// is implemented using abort(). cleanup property is ignored.
   /// @note You need to set ulimit to a value different from the default 0
   /// (for example, "ulimit -c unlimited") to enable core dumps generation
   /// on your system.
   /// @note Default value of this property is true.
-  void set_generateCoreDump(bool value);
+  void set_generate_core_dump(bool value);
 
 #ifdef QUICK_EXIT
-  /// @brief Returns the value of quickExit property.
+  /// @brief Returns the value of quick_exit property.
   /// @details If quick_exit is set to true, program will be terminated with
-  /// quick_exit() call. generateCoreDump and cleanup properties are
+  /// quick_exit() call. generate_core_dump and cleanup properties are
   /// ignored.
   /// @note Default value is false.
-  bool quickExit();
+  bool quick_exit();
 
-  /// @brief Sets the value of quickExit property.
+  /// @brief Sets the value of quick_exit property.
   /// @details If quick_exit is set to true, program will be terminated with
-  /// quick_exit() call. generateCoreDump and cleanup properties are
+  /// quick_exit() call. generate_core_dump and cleanup properties are
   /// ignored.
   /// @note Default value is false.
-  void set_quickExit(bool value);
+  void set_quick_exit(bool value);
 
   /// @brief Returns the depth of the stack trace.
   /// @note Default value is 16.
-  int framesCount();
+  int frames_count();
 
   /// @brief Sets the depth of the stack trace. Accepted range is 1..100.
   /// @note Default value is 16.
-  void set_framesCount(int value);
+  void set_frames_count(int value);
 #endif
 
   /// @brief Returns the value indicating whether to shorten stack trace paths
   /// by cutting off the common root between each path and the current working
   /// directory.
   /// @note Default value is true.
-  bool cutCommonPathRoot();
+  bool cut_common_path_root();
 
   /// @brief Sets the value indicating whether to shorten stack trace paths
   /// by cutting off the common root between each path and the current working
   /// directory.
   /// @note Default value is true.
-  void set_cutCommonPathRoot(bool value);
+  void set_cut_common_path_root(bool value);
 
   /// @brief Returns the value indicating whether to shorten stack trace paths
   /// by cutting off the relative part (e.g., "../../..").
   /// @note Default value is true.
-  bool cutRelativePaths();
+  bool cut_relative_paths();
 
   /// @brief Sets the value indicating whether to shorten stack trace paths
   /// by cutting off the relative part (e.g., "../../..").
   /// @note Default value is true.
-  void set_cutRelativePaths(bool value);
+  void set_cut_relative_paths(bool value);
 
   /// @brief Returns the value indicating whether to append the process id
   /// to each stack trace line.
   /// @note Default value is false.
-  bool appendPid();
+  bool append_pid();
 
   /// @brief Sets the value indicating whether to append the process id
   /// to each stack trace line.
   /// @note Default value is false.
-  void set_appendPid(bool value);
+  void set_append_pid(bool value);
 
   /// @brief Returns the value indicating whether to color the output
   /// with ANSI escape sequences.
   /// @note Default value is true.
-  bool colorOutput();
+  bool color_output();
 
   /// @brief Sets the value indicating whether to color the output
   /// with ANSI escape sequences.
   /// @note Default value is true.
-  void set_colorOutput(bool value);
+  void set_color_output(bool value);
 
   /// @brief Returns the value indicating whether to do a thread-safe
   /// stack trace printing, stopping all running threads by forking.
   /// @note Default value is true.
-  bool threadSafe();
+  bool thread_safe();
 
   /// @brief Sets the value indicating whether to do a thread-safe stack trace
   /// printing, stopping all running threads by forking.
   /// @note Default value is true.
-  void set_threadSafe(bool value);
+  void set_thread_safe(bool value);
 
  private:
   static const int kMaxPathLength;
@@ -196,17 +196,17 @@ class DeathHandler {
   static void SignalHandler(int sig, void* info,
                             void* secret);
 
-  static bool generateCoreDump_;
+  static bool generate_core_dump_;
   static bool cleanup_;
 #ifdef QUICK_EXIT
-  static bool quickExit_;
+  static bool quick_exit_;
 #endif
-  static int framesCount_;
-  static bool cutCommonPathRoot_;
-  static bool cutRelativePaths_;
-  static bool appendPid_;
-  static bool colorOutput_;
-  static bool threadSafe_;
+  static int frames_count_;
+  static bool cut_common_path_root_;
+  static bool cut_relative_paths_;
+  static bool append_pid_;
+  static bool color_output_;
+  static bool thread_safe_;
 };
 
 }  // namespace Debug

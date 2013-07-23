@@ -49,7 +49,7 @@ using Debug::DeathHandler;
                                *p = 0; \
                              } while (false)
 
-TEST(DeathHandler, Simple) {
+TEST(DeathHandler, SimpleSIGSEGV) {
   int pipefd[2];
   assert(pipe(pipefd) == 0);
 
@@ -74,7 +74,41 @@ TEST(DeathHandler, Simple) {
   printf("%s", text);
   char* posstr = strstr(text, "Segmentation fault");
   ASSERT_NE(static_cast<const char*>(NULL), posstr);
-  posstr = strstr(text, "[DeathHandler_Simple_Test::TestBody()]");
+  posstr = strstr(text, "[DeathHandler_SimpleSIGSEGV_Test::TestBody()]");
+  ASSERT_NE(static_cast<const char*>(NULL), posstr);
+  posstr = strstr(text, "death_handler");
+  ASSERT_NE(static_cast<const char*>(NULL), posstr);
+  // Warning: hard-coded line number
+  posstr = strstr(text, ":38");
+  ASSERT_NE(static_cast<const char*>(NULL), posstr);
+}
+
+TEST(DeathHandler, SimpleSIGABRT) {
+  int pipefd[2];
+  assert(pipe(pipefd) == 0);
+
+  int pid = fork();
+  if (pid == 0) {
+    close(pipefd[0]);
+    dup2(pipefd[1], STDOUT_FILENO);
+    dup2(pipefd[1], STDERR_FILENO);
+    DeathHandler dh;
+    assert(false);
+  }
+  close(pipefd[1]);
+  wait(NULL);
+  char text[4096];
+  int bytesRead;
+  int totalBytesRead = 0;
+  while ((bytesRead = read(pipefd[0], &text[totalBytesRead],
+                          sizeof(text) - totalBytesRead)) > 0) {
+    totalBytesRead += bytesRead;
+  }
+  close(pipefd[0]);
+  printf("%s", text);
+  char* posstr = strstr(text, "Aborted");
+  ASSERT_NE(static_cast<const char*>(NULL), posstr);
+  posstr = strstr(text, "[DeathHandler_SimpleSIGABRT_Test::TestBody()]");
   ASSERT_NE(static_cast<const char*>(NULL), posstr);
   posstr = strstr(text, "death_handler");
   ASSERT_NE(static_cast<const char*>(NULL), posstr);
