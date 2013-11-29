@@ -52,10 +52,60 @@
 #endif
 #include <dlfcn.h>
 
+#define MALLOC_HOOK_DEPRECATED
+
+#if defined(MALLOC_HOOK_DEPRECATED)
+# define malloc_function_name malloc
+# define free_function_name free
+#endif
+
 #pragma GCC poison malloc realloc free backtrace_symbols \
   printf fprintf sprintf snprintf scanf sscanf  // NOLINT(runtime/printf)
 
+#if defined(MALLOC_HOOK_DEPRECATED) && !defined(__GNUC__)
+# error "Not implemented on this compiler"
+#endif
+
 #define checked(x) do { if ((x) <= 0) _Exit(EXIT_FAILURE); } while (false)
+
+#if defined(MALLOC_HOOK_DEPRECATED)
+extern "C" void* __libc_malloc (size_t);
+extern "C" void __libc_free (void*);
+int g_malloc_hook_active = 0;
+
+static void* my_malloc_hook (size_t size, const void*) {
+  void* result;
+
+  g_malloc_hook_active = 0;
+  result = malloc_function_name(size);
+  g_malloc_hook_active = 1;
+
+  return result;
+}
+static void my_free_hook (void* ptr, const void*) {
+	g_malloc_hook_active = 0;
+	free_function_name(ptr);
+	g_malloc_hook_active = 1;
+}
+
+void* malloc_function_name (size_t size) {
+  void* const caller = NULL; //__builtin_return_address(0);
+  if (g_malloc_hook_active)
+    return my_malloc_hook(size, caller);
+  else
+    return __libc_malloc(size);
+}
+void free_function_name (void* ptr) {
+  void* const caller = NULL; //__builtin_return_address(0);
+  if (g_malloc_hook_active)
+    return my_free_hook(ptr, caller);
+  else
+    return __libc_free(ptr);
+}
+
+# undef malloc_function_name
+# undef free_function_name
+#endif
 
 namespace Debug {
 
@@ -256,6 +306,7 @@ static char *addr2line(const char *image, void *addr) {
   return line;
 }
 
+#if !defined(MALLOC_HOOK_DEPRECATED)
 /// @brief Used to workaround backtrace() usage of malloc().
 static void* MallocHook(size_t size,
                         const void* caller __attribute__((unused))) {
@@ -268,6 +319,7 @@ static void* MallocHook(size_t size,
   }
   return mallocBuffer;
 }
+#endif
 
 #if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
 #pragma GCC diagnostic push
@@ -352,14 +404,25 @@ void DeathHandler::SignalHandler(int sig,
 
   Safe::print2stderr("\nStack trace:\n");
   void *trace[frames_count_ + 2];
+  int trace_size;
+#if defined(MALLOC_HOOK_DEPRECATED)
+  {
+    g_malloc_hook_active = 1;
+	trace_size = backtrace(trace, frames_count_ + 2);
+	g_malloc_hook_active = 0;
+  }
+#else
   // Workaround malloc() inside backtrace()
-  void* (*oldMallocHook)(size_t, const void*) = __malloc_hook;
-  void (*oldFreeHook)(void *, const void *) = __free_hook;
-  __malloc_hook = MallocHook;
-  __free_hook = NULL;
-  int trace_size = backtrace(trace, frames_count_ + 2);
-  __malloc_hook = oldMallocHook;
-  __free_hook = oldFreeHook;
+  {
+    void* (*oldMallocHook)(size_t, const void*) = __malloc_hook;
+    void (*oldFreeHook)(void *, const void *) = __free_hook;
+    __malloc_hook = MallocHook;
+    __free_hook = NULL;
+    trace_size = backtrace(trace, frames_count_ + 2);
+    __malloc_hook = oldMallocHook;
+    __free_hook = oldFreeHook;
+  }
+#endif
   if (trace_size <= 2) {
     struct sigaction sa;
     sigaction(SIGABRT, NULL, &sa);
@@ -513,3 +576,7 @@ void DeathHandler::SignalHandler(int sig,
 #endif
 
 }  // namespace Debug
+
+#if defined(MALLOC_HOOK_DEPRECATED)
+#undef MALLOC_HOOK_DEPRECATED
+#endif
