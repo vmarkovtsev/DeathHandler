@@ -273,6 +273,10 @@ static void* MallocHook(size_t size,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
 
 void DeathHandler::SignalHandler(int sig,
                                  void *info __attribute__((unused)),
@@ -442,7 +446,7 @@ void DeathHandler::SignalHandler(int sig,
         int cpi;
         for (cpi = 0; cwd[cpi] == line[cpi]; cpi++) {};
         if (line[cpi - 1] != '/') {
-          for (cpi; line[cpi - 1] != '/'; cpi--) {};
+          for (; line[cpi - 1] != '/'; cpi--) {};
         }
         if (cpi > 1) {
           line = line + cpi;
@@ -510,6 +514,9 @@ void DeathHandler::SignalHandler(int sig,
 
 #if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
 #pragma GCC diagnostic pop
+#endif
+#ifdef __clang__
+#pragma clang diagnostic pop
 #endif
 
 }  // namespace Debug

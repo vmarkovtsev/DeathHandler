@@ -40,7 +40,7 @@
 #include "death_handler.h"
 #include <malloc.h>
 #include <gtest/gtest.h>
-//#include <thread>  // NOLINT(build/include_order)
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 using Debug::DeathHandler;
 
