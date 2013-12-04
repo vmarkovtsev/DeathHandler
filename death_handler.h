@@ -191,10 +191,12 @@ class DeathHandler {
   void set_thread_safe(bool value);
 
  private:
-  static const int kMaxPathLength;
+  /// @brief The size of the preallocated memory to use in the signal handler.
+  static const size_t kNeededMemory;
 
   static void SignalHandler(int sig, void* info,
                             void* secret);
+  static void* MallocHook(size_t size, const void* /* caller */);
 
   static bool generate_core_dump_;
   static bool cleanup_;
@@ -207,6 +209,8 @@ class DeathHandler {
   static bool append_pid_;
   static bool color_output_;
   static bool thread_safe_;
+  /// @brief The preallocated memory to use in the signal handler.
+  static char* memory_;  
 };
 
 }  // namespace Debug
