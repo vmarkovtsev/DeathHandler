@@ -147,7 +147,7 @@ DeathHandler::DeathHandler() {
   struct sigaction sa;
   sa.sa_sigaction = (sa_sigaction_handler)SignalHandler;
   sigemptyset(&sa.sa_mask);
-  sa.sa_flags = SA_RESTART | SA_SIGINFO;
+  sa.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
   sigaction(SIGSEGV, &sa, NULL);
   sigaction(SIGABRT, &sa, NULL);  
 }
