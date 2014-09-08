@@ -65,8 +65,14 @@ namespace Debug {
 /// of the needed libc functions which potentially use heap.
 namespace Safe {
   /// @brief Converts an integer to a preallocated string.
+  /// @pre base must be less than or equal to 16.
   INLINE char *itoa(int val, char* memory, int base = 10) {
     char* res = memory;
+    if (val == 0) {
+      res[0] = '0';
+      res[1] = '\0';
+      return res;
+    }
     const int res_max_length = 32;
     int i;
     bool negative = val < 0;
@@ -81,8 +87,14 @@ namespace Safe {
   }
 
   /// @brief Converts an unsigned integer to a preallocated string.
+  /// @pre base must be less than or equal to 16.
   INLINE char *utoa(uint64_t val, char* memory, int base = 10) {
     char* res = memory;
+    if (val == 0) {
+      res[0] = '0';
+      res[1] = '\0';
+      return res;
+    }
     const int res_max_length = 32;
     int i;
     res[res_max_length - 1] = 0;
