@@ -150,16 +150,23 @@ DeathHandler::DeathHandler() {
   sa.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
   sigaction(SIGSEGV, &sa, NULL);
   sigaction(SIGABRT, &sa, NULL);  
+  sigaction(SIGFPE, &sa, NULL);
 }
 
 DeathHandler::~DeathHandler() {
   struct sigaction sa;
+
   sigaction(SIGSEGV, NULL, &sa);
   sa.sa_handler = SIG_DFL;
   sigaction(SIGSEGV, &sa, NULL);
+
   sigaction(SIGABRT, NULL, &sa);
   sa.sa_handler = SIG_DFL;
   sigaction(SIGABRT, &sa, NULL);
+
+  sigaction(SIGFPE, NULL, &sa);
+  sa.sa_handler = SIG_DFL;
+  sigaction(SIGFPE, &sa, NULL);
   delete[] memory_;
 }
 
@@ -384,6 +391,9 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
         break;
       case SIGABRT:
         strcat(msg, "Aborted");  // NOLINT(runtime/printf)
+        break;
+      case SIGFPE:
+        strcat(msg, "Floating point exception");  // NOLINT(runtime/printf)
         break;
       default:
         strcat(msg, "Caught signal ");  // NOLINT(runtime/printf)
