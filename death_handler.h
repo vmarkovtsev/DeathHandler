@@ -194,8 +194,7 @@ class DeathHandler {
   /// @brief The size of the preallocated memory to use in the signal handler.
   static const size_t kNeededMemory;
 
-  static void SignalHandler(int sig, void* info,
-                            void* secret);
+  static void SignalHandler(int sig, void* info, void* secret);
   static void* MallocHook(size_t size, const void* /* caller */);
 
   static bool generate_core_dump_;

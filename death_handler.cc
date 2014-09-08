@@ -138,12 +138,14 @@ bool DeathHandler::color_output_ = true;
 bool DeathHandler::thread_safe_ = true;
 char* DeathHandler::memory_ = NULL;
 
+typedef void (*sa_sigaction_handler) (int, siginfo_t *, void *);
+
 DeathHandler::DeathHandler() {
   if (memory_ == NULL) {
     memory_ = new char[kNeededMemory];
   }
   struct sigaction sa;
-  sa.sa_handler = (__sighandler_t)SignalHandler;
+  sa.sa_sigaction = (sa_sigaction_handler)SignalHandler;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART | SA_SIGINFO;
   sigaction(SIGSEGV, &sa, NULL);
@@ -325,9 +327,7 @@ void* DeathHandler::MallocHook(size_t size,
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
-void DeathHandler::SignalHandler(int sig,
-                                 void * /* info */,
-                                 void *secret) {
+void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
   // Stop all other running threads by forking
   pid_t forkedPid = fork();
   if (forkedPid != 0) {
