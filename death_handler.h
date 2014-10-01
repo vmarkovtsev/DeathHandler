@@ -128,6 +128,7 @@ class DeathHandler {
   /// ignored.
   /// @note Default value is false.
   void set_quick_exit(bool value);
+#endif
 
   /// @brief Returns the depth of the stack trace.
   /// @note Default value is 16.
@@ -136,7 +137,6 @@ class DeathHandler {
   /// @brief Sets the depth of the stack trace. Accepted range is 1..100.
   /// @note Default value is 16.
   void set_frames_count(int value);
-#endif
 
   /// @brief Returns the value indicating whether to shorten stack trace paths
   /// by cutting off the common root between each path and the current working
