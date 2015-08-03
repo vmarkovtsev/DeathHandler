@@ -325,7 +325,7 @@ void* DeathHandler::MallocHook(size_t size,
   return malloc_buffer;
 }
 
-#if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
+#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
@@ -595,7 +595,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
   _Exit(EXIT_SUCCESS);
 }
 
-#if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
+#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)
 #pragma GCC diagnostic pop
 #endif
 #ifdef __clang__
