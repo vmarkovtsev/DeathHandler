@@ -36,7 +36,6 @@
 
 #include "death_handler.h"
 #include <assert.h>
-#include <cxxabi.h>
 #include <execinfo.h>
 #include <pthread.h>
 #include <signal.h>
