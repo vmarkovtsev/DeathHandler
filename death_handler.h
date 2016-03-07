@@ -58,8 +58,8 @@
 
 // We have to override malloc() and free()
 extern "C" {
-void* malloc(size_t size);
-void free(void* ptr);
+void* malloc(size_t size) throw();
+void free(void* ptr) throw();
 }
 
 #ifdef __linux__
@@ -199,8 +199,8 @@ class DeathHandler {
   void set_thread_safe(bool value);
 
  private:
-  friend void* ::malloc(size_t size);
-  friend void ::free(void *ptr);
+  friend void* ::malloc(size_t size) throw();
+  friend void ::free(void *ptr) throw();
   /// @brief The size of the preallocated memory to use in the signal handler.
   static const size_t kNeededMemory;
 

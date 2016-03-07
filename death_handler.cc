@@ -61,7 +61,7 @@ namespace Safe {
 }  // namespace Debug
 
 extern "C" {
-void* malloc(size_t size) {
+void* malloc(size_t size) throw() {
     write(STDOUT_FILENO, "malloc\n", 7);
   if (!Debug::DeathHandler::heap_trap_active_) {
     if (!Debug::DeathHandler::malloc_) {
@@ -80,7 +80,7 @@ void* malloc(size_t size) {
   return malloc_buffer;
 }
 
-void free(void* ptr) {
+void free(void* ptr) throw() {
   if (!Debug::DeathHandler::heap_trap_active_) {
     if (!Debug::DeathHandler::free_) {
       Debug::DeathHandler::free_ = dlsym(RTLD_NEXT, "free");
@@ -188,9 +188,9 @@ DeathHandler::DeathHandler() {
   altstack.ss_sp = memory_ + kNeededMemory;
   altstack.ss_size = MINSIGSTKSZ;
   altstack.ss_flags = 0;
-  if (sigaltstack(&altstack, NULL) < 0) {
-    perror("DeathHandler - sigaltstack");
-  }
+  //if (sigaltstack(&altstack, NULL) < 0) {
+  //  perror("DeathHandler - sigaltstack");
+  //}
   struct sigaction sa;
   sa.sa_sigaction = (sa_sigaction_handler)SignalHandler;
   sigemptyset(&sa.sa_mask);
@@ -453,7 +453,11 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
     if (color_output_) {
       strcat(msg, "\033[33;1m");  // NOLINT(runtime/printf)
     }
+  #ifndef __APPLE__
+    strcat(msg, Safe::utoa(pthread_self(), msg + msg_max_length));  // NOLINT(*)
+  #else
     strcat(msg, Safe::utoa(reinterpret_cast<uint64_t>(pthread_self()), msg + msg_max_length));  // NOLINT(*)
+  #endif
     if (color_output_) {
       strcat(msg, "\033[0m");  // NOLINT(runtime/printf)
     }
@@ -624,6 +628,10 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
     strcat(line, "\n");  // NOLINT(runtime/printf)
     Safe::print2stderr(line);
   }
+
+  // Write '\0' to indicate the end of the output
+  char end = '\0';
+  write(STDERR_FILENO, &end, 1);
 
 #elif defined(__APPLE__)
   for (int i = 0; i < trace_size; i++) {
