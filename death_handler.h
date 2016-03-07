@@ -4,7 +4,7 @@
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are met: 
+  modification, are permitted provided that the following conditions are met:
 
   1. Redistributions of source code must retain the above copyright notice, this
      list of conditions and the following disclaimer.
@@ -28,10 +28,10 @@
 /*! @file death_handler.h
  *  @brief Declaration of the SIGSEGV/SIGABRT handler which prints the debug stack
  *  trace.
- *  @author Markovtsev Vadim <v.markovtsev@samsung.com>
+ *  @author Markovtsev Vadim <gmarkhor@gmail.com>
  *  @version 1.0
  *  @license Simplified BSD License
- *  @copyright 2012 Samsung R&D Institute Russia
+ *  @copyright 2012 Samsung R&D Institute Russia, 2016 Moscow Institute of Physics and Technology
  */
 
 /*! @mainpage SIGSEGV/SIGABRT handler which prints the debug stack trace.
@@ -56,8 +56,16 @@
 
 #include <stddef.h>
 
+// We have to override malloc() and free()
+extern "C" {
+void* malloc(size_t size);
+void free(void* ptr);
+}
+
+#ifdef __linux__
 // Comment this out on systems without quick_exit()
 #define QUICK_EXIT
+#endif
 
 namespace Debug {
 
@@ -191,15 +199,16 @@ class DeathHandler {
   void set_thread_safe(bool value);
 
  private:
+  friend void* ::malloc(size_t size);
+  friend void ::free(void *ptr);
   /// @brief The size of the preallocated memory to use in the signal handler.
   static const size_t kNeededMemory;
 
-  /// @brief The size of the preallocated alternative signal handler stack (included into kNeededMemory).
-  static const size_t kStackMemory;
-
   static void SignalHandler(int sig, void* info, void* secret);
-  static void* MallocHook(size_t size, const void* /* caller */);
-
+  static void* malloc_;
+  static void* free_;
+  /// @brief Used to workaround backtrace() usage of malloc().
+  static bool heap_trap_active_;
   static bool generate_core_dump_;
   static bool cleanup_;
 #ifdef QUICK_EXIT
@@ -212,7 +221,7 @@ class DeathHandler {
   static bool color_output_;
   static bool thread_safe_;
   /// @brief The preallocated memory to use in the signal handler.
-  static char* memory_;  
+  static char* memory_;
 };
 
 }  // namespace Debug

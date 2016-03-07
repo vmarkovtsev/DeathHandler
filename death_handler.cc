@@ -28,17 +28,16 @@
 /*! @file death_handler.cc
  *  @brief Implementation of the SIGSEGV/SIGABRT handler which prints the debug
  *  stack trace.
- *  @author Markovtsev Vadim <v.markovtsev@samsung.com>
+ *  @author Markovtsev Vadim <gmarkhor@gmail.com>
  *  @version 1.0
  *  @license Simplified BSD License
- *  @copyright 2012 Samsung R&D Institute Russia
+ *  @copyright 2012 Samsung R&D Institute Russia, 2016 Moscow Institute of Physics and Technology
  */
 
 #include "death_handler.h"
 #include <assert.h>
 #include <cxxabi.h>
 #include <execinfo.h>
-#include <malloc.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -46,18 +45,56 @@
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
-#include <wait.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 #include <dlfcn.h>
 
+#define INLINE __attribute__((always_inline)) inline
+
+namespace Debug {
+namespace Safe {
+  INLINE void print2stderr(const char *msg, size_t len = 0);
+}  // namespace Safe
+}  // namespace Debug
+
+extern "C" {
+void* malloc(size_t size) {
+    write(STDOUT_FILENO, "malloc\n", 7);
+  if (!Debug::DeathHandler::heap_trap_active_) {
+    if (!Debug::DeathHandler::malloc_) {
+      Debug::DeathHandler::malloc_ = dlsym(RTLD_NEXT, "malloc");
+    }
+    return ((void*(*)(size_t))Debug::DeathHandler::malloc_)(size);
+  }
+  char* malloc_buffer =
+      Debug::DeathHandler::memory_ + Debug::DeathHandler::kNeededMemory - 512;
+  if (size > 512U) {
+    const char* msg = "malloc() replacement function should not return "
+        "a memory block larger than 512 bytes\n";
+    Debug::Safe::print2stderr(msg, strlen(msg) + 1);
+    _Exit(EXIT_FAILURE);
+  }
+  return malloc_buffer;
+}
+
+void free(void* ptr) {
+  if (!Debug::DeathHandler::heap_trap_active_) {
+    if (!Debug::DeathHandler::free_) {
+      Debug::DeathHandler::free_ = dlsym(RTLD_NEXT, "free");
+    }
+    ((void(*)(void*))Debug::DeathHandler::free_)(ptr);
+  }
+  // no-op
+}
+}  // extern "C"
+
 #pragma GCC poison malloc realloc free backtrace_symbols \
   printf fprintf sprintf snprintf scanf sscanf  // NOLINT(runtime/printf)
 
 #define checked(x) do { if ((x) <= 0) _Exit(EXIT_FAILURE); } while (false)
-
-#define INLINE __attribute__((always_inline)) inline
 
 namespace Debug {
 
@@ -115,7 +152,7 @@ namespace Safe {
   }
 
   /// @brief Reentrant printing to stderr.
-  INLINE void print2stderr(const char *msg, size_t len = 0) {
+  INLINE void print2stderr(const char *msg, size_t len) {
     if (len > 0) {
       checked(write(STDERR_FILENO, msg, len));
     } else {
@@ -125,7 +162,6 @@ namespace Safe {
 }  // namespace Safe
 
 const size_t DeathHandler::kNeededMemory = 16384;
-const size_t DeathHandler::kStackMemory = 4000;
 bool DeathHandler::generate_core_dump_ = true;
 bool DeathHandler::cleanup_ = true;
 #ifdef QUICK_EXIT
@@ -138,16 +174,19 @@ bool DeathHandler::append_pid_ = false;
 bool DeathHandler::color_output_ = true;
 bool DeathHandler::thread_safe_ = true;
 char* DeathHandler::memory_ = NULL;
+void* DeathHandler::malloc_ = NULL;
+void* DeathHandler::free_ = NULL;
+bool DeathHandler::heap_trap_active_ = false;
 
 typedef void (*sa_sigaction_handler) (int, siginfo_t *, void *);
 
 DeathHandler::DeathHandler() {
   if (memory_ == NULL) {
-    memory_ = new char[kNeededMemory];
+    memory_ = new char[kNeededMemory + MINSIGSTKSZ];
   }
   stack_t altstack;
-  altstack.ss_sp = memory_ + kNeededMemory - kStackMemory;
-  altstack.ss_size = kStackMemory;
+  altstack.ss_sp = memory_ + kNeededMemory;
+  altstack.ss_size = MINSIGSTKSZ;
   altstack.ss_flags = 0;
   if (sigaltstack(&altstack, NULL) < 0) {
     perror("DeathHandler - sigaltstack");
@@ -296,9 +335,9 @@ static char *addr2line(const char *image, void *addr, bool color_output,
 
   close(pipefd[1]);
   const int line_max_length = 4096;
-  char* line = *memory; 
+  char* line = *memory;
   *memory += line_max_length;
-  ssize_t len = read(pipefd[0], line, line_max_length);  
+  ssize_t len = read(pipefd[0], line, line_max_length);
   close(pipefd[0]);
   if (len == 0) {
     safe_abort();
@@ -330,19 +369,6 @@ static char *addr2line(const char *image, void *addr, bool color_output,
     }
   }
   return line;
-}
-
-/// @brief Used to workaround backtrace() usage of malloc().
-void* DeathHandler::MallocHook(size_t size,
-                               const void* /* caller */) {
-  char* malloc_buffer = memory_ + kNeededMemory - 512;
-  if (size > 512U) {
-    const char* msg = "malloc() replacement function should not return "
-        "a memory block larger than 512 bytes\n";
-    Safe::print2stderr(msg, strlen(msg) + 1);
-    _Exit(EXIT_FAILURE);
-  }
-  return malloc_buffer;
 }
 
 #if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)
@@ -427,7 +453,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
     if (color_output_) {
       strcat(msg, "\033[33;1m");  // NOLINT(runtime/printf)
     }
-    strcat(msg, Safe::utoa(pthread_self(), msg + msg_max_length));  // NOLINT(*)
+    strcat(msg, Safe::utoa(reinterpret_cast<uint64_t>(pthread_self()), msg + msg_max_length));  // NOLINT(*)
     if (color_output_) {
       strcat(msg, "\033[0m");  // NOLINT(runtime/printf)
     }
@@ -439,7 +465,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
     if (color_output_) {
       strcat(msg, "\033[0m");  // NOLINT(runtime/printf)
     }
-    strcat(msg, ")");  // NOLINT(runtime/printf)    
+    strcat(msg, ")");  // NOLINT(runtime/printf)
     Safe::print2stderr(msg);
   }
 
@@ -447,18 +473,15 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
   void **trace = reinterpret_cast<void**>(memory);
   memory += (frames_count_ + 2) * sizeof(void*);
   // Workaround malloc() inside backtrace()
-  void* (*oldMallocHook)(size_t, const void*) = __malloc_hook;
-  void (*oldFreeHook)(void *, const void *) = __free_hook;
-  __malloc_hook = MallocHook;
-  __free_hook = NULL;
+  heap_trap_active_ = true;
   int trace_size = backtrace(trace, frames_count_ + 2);
-  __malloc_hook = oldMallocHook;
-  __free_hook = oldFreeHook;
+  heap_trap_active_ = false;
   if (trace_size <= 2) {
     safe_abort();
   }
 
   // Overwrite sigaction with caller's address
+#ifdef __linux__
 #if defined(__arm__)
   trace[1] = reinterpret_cast<void *>(uc->uc_mcontext.arm_pc);
 #else
@@ -481,7 +504,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
   }
   name_buf[name_buf_length] = 0;
   memory += name_buf_length + 1;
-  char* cwd = memory;  
+  char* cwd = memory;
   if (getcwd(cwd, path_max_length) == NULL) {
     safe_abort();
   }
@@ -510,7 +533,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
       {
         // "\033[34;1m[%s]\033[0m \033[33;1m(%i)\033[0m\n
         char* msg = memory;
-        const int msg_max_length = 512;        
+        const int msg_max_length = 512;
         if (color_output_) {
           strcpy(msg, "\033[34;1m");  // NOLINT(runtime/printf)
         } else {
@@ -602,10 +625,13 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
     Safe::print2stderr(line);
   }
 
-  // Write '\0' to indicate the end of the output
-  char end = '\0';
-  write(STDERR_FILENO, &end, 1);
-  
+#elif defined(__APPLE__)
+  for (int i = 0; i < trace_size; i++) {
+    Safe::ptoa(trace[i], memory);
+    strcat(memory, "\n");
+    Safe::print2stderr(memory);
+  }
+#endif
   if (thread_safe_) {
     // Resume the parent process
     kill(getppid(), SIGCONT);
