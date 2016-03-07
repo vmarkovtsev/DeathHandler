@@ -4,13 +4,13 @@
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are met: 
+  modification, are permitted provided that the following conditions are met:
 
   1. Redistributions of source code must retain the above copyright notice, this
-     list of conditions and the following disclaimer. 
+     list of conditions and the following disclaimer.
   2. Redistributions in binary form must reproduce the above copyright notice,
      this list of conditions and the following disclaimer in the documentation
-     and/or other materials provided with the distribution. 
+     and/or other materials provided with the distribution.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
   ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -22,18 +22,18 @@
   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  
+
  */
 
 /*! @file death_handler.h
  *  @brief Declaration of the SIGSEGV/SIGABRT handler which prints the debug stack
  *  trace.
- *  @author Markovtsev Vadim <v.markovtsev@samsung.com>
+ *  @author Markovtsev Vadim <gmarkhor@gmail.com>
  *  @version 1.0
  *  @license Simplified BSD License
- *  @copyright 2012 Samsung R&D Institute Russia
+ *  @copyright 2012 Samsung R&D Institute Russia, 2016 Moscow Institute of Physics and Technology
  */
- 
+
 /*! @mainpage SIGSEGV/SIGABRT handler which prints the debug stack trace.
  *  Example
  *  =======
@@ -55,9 +55,24 @@
 #define DEATH_HANDLER_H_
 
 #include <stddef.h>
+#include <unistd.h>
 
+// We have to override malloc() and free()
+extern "C" {
+void* __malloc_impl(size_t size);
+#ifdef __linux__
+void* malloc(size_t size) throw();
+void free(void* ptr) throw();
+#elif defined(__APPLE__)
+void* __malloc_zone(struct _malloc_zone_t* zone, size_t size);
+void __free_zone(struct _malloc_zone_t* zone, void* ptr);
+#endif
+}
+
+#ifdef __linux__
 // Comment this out on systems without quick_exit()
 #define QUICK_EXIT
+#endif
 
 namespace Debug {
 
@@ -74,8 +89,13 @@ namespace Debug {
 /// the same time.
 class DeathHandler {
  public:
-  /// @brief Installs the SIGSEGV/SIGABRT signal handler.
-  DeathHandler();
+  typedef ssize_t (*OutputCallback)(const char*, size_t);
+
+  /// @brief Installs the SIGSEGV/etc. signal handler.
+  /// @param altstack If true, allocate and use a dedicated signal handler stack.
+  /// backtrace() will report nothing then, but the handler will survive a stack
+  /// overflow.
+  DeathHandler(bool altstack = false);
   /// @brief This is called on normal program termination. Previously installed
   /// SIGSEGV and SIGABRT signal handlers are removed.
   ~DeathHandler();
@@ -85,7 +105,7 @@ class DeathHandler {
   /// destructors and atexit() callbacks before terminating. If
   /// generate_core_dump is set to true, this property is ignored.
   /// @note Default value of this property is true.
-  bool cleanup();
+  bool cleanup() const;
 
   /// @brief Returns the value of cleanup property.
   /// @details If cleanup is set to true, program attempts to run all static
@@ -102,7 +122,7 @@ class DeathHandler {
   /// (for example, "ulimit -c unlimited") to enable core dumps generation
   /// on your system.
   /// @note Default value of this property is true.
-  bool generate_core_dump();
+  bool generate_core_dump() const;
 
   /// @brief Sets the value of generate_core_dump property.
   /// @details If generate_core_dump is set to true, a core dump will
@@ -120,7 +140,7 @@ class DeathHandler {
   /// quick_exit() call. generate_core_dump and cleanup properties are
   /// ignored.
   /// @note Default value is false.
-  bool quick_exit();
+  bool quick_exit() const;
 
   /// @brief Sets the value of quick_exit property.
   /// @details If quick_exit is set to true, program will be terminated with
@@ -132,7 +152,7 @@ class DeathHandler {
 
   /// @brief Returns the depth of the stack trace.
   /// @note Default value is 16.
-  int frames_count();
+  int frames_count() const;
 
   /// @brief Sets the depth of the stack trace. Accepted range is 1..100.
   /// @note Default value is 16.
@@ -142,7 +162,7 @@ class DeathHandler {
   /// by cutting off the common root between each path and the current working
   /// directory.
   /// @note Default value is true.
-  bool cut_common_path_root();
+  bool cut_common_path_root() const;
 
   /// @brief Sets the value indicating whether to shorten stack trace paths
   /// by cutting off the common root between each path and the current working
@@ -153,7 +173,7 @@ class DeathHandler {
   /// @brief Returns the value indicating whether to shorten stack trace paths
   /// by cutting off the relative part (e.g., "../../..").
   /// @note Default value is true.
-  bool cut_relative_paths();
+  bool cut_relative_paths() const;
 
   /// @brief Sets the value indicating whether to shorten stack trace paths
   /// by cutting off the relative part (e.g., "../../..").
@@ -163,7 +183,7 @@ class DeathHandler {
   /// @brief Returns the value indicating whether to append the process id
   /// to each stack trace line.
   /// @note Default value is false.
-  bool append_pid();
+  bool append_pid() const;
 
   /// @brief Sets the value indicating whether to append the process id
   /// to each stack trace line.
@@ -173,7 +193,7 @@ class DeathHandler {
   /// @brief Returns the value indicating whether to color the output
   /// with ANSI escape sequences.
   /// @note Default value is true.
-  bool color_output();
+  bool color_output() const;
 
   /// @brief Sets the value indicating whether to color the output
   /// with ANSI escape sequences.
@@ -183,19 +203,42 @@ class DeathHandler {
   /// @brief Returns the value indicating whether to do a thread-safe
   /// stack trace printing, stopping all running threads by forking.
   /// @note Default value is true.
-  bool thread_safe();
+  bool thread_safe() const;
 
   /// @brief Sets the value indicating whether to do a thread-safe stack trace
   /// printing, stopping all running threads by forking.
   /// @note Default value is true.
   void set_thread_safe(bool value);
 
+  /// @brief Returns the current output callback.
+  /// @note Default value is write to stderr.
+  OutputCallback output_callback() const;
+
+  /// @brief Changes output callback (that is, how to write the trace, etc.).
+  /// @note Default value is write to stderr.
+  void set_output_callback(OutputCallback value);
+
  private:
+  friend void* ::__malloc_impl(size_t);
+#ifdef __linux__
+  friend void* ::malloc(size_t) throw();
+  friend void ::free(void*) throw();
+#elif defined(__APPLE__)
+  friend void* ::__malloc_zone(struct _malloc_zone_t*, size_t);
+  friend void ::__free_zone(struct _malloc_zone_t*, void*);
+#endif
+  /// @brief Reentrant printing to stderr.
+  inline static void print(const char* msg, size_t len = 0);
+
   /// @brief The size of the preallocated memory to use in the signal handler.
   static const size_t kNeededMemory;
 
-  static void SignalHandler(int sig, void* info, void* secret);
-  static void* MallocHook(size_t size, const void* /* caller */);
+  static void HandleSignal(int sig, void* info, void* secret);
+
+  /// @brief Used to workaround backtrace() usage of malloc().
+  static void* malloc_;
+  static void* free_;
+  static bool heap_trap_active_;
 
   static bool generate_core_dump_;
   static bool cleanup_;
@@ -208,8 +251,9 @@ class DeathHandler {
   static bool append_pid_;
   static bool color_output_;
   static bool thread_safe_;
+  static OutputCallback output_callback_;
   /// @brief The preallocated memory to use in the signal handler.
-  static char* memory_;  
+  static char* memory_;
 };
 
 }  // namespace Debug

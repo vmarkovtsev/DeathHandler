@@ -4,13 +4,13 @@
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are met: 
+  modification, are permitted provided that the following conditions are met:
 
   1. Redistributions of source code must retain the above copyright notice, this
-     list of conditions and the following disclaimer. 
+     list of conditions and the following disclaimer.
   2. Redistributions in binary form must reproduce the above copyright notice,
      this list of conditions and the following disclaimer in the documentation
-     and/or other materials provided with the distribution. 
+     and/or other materials provided with the distribution.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
   ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -22,7 +22,7 @@
   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  
+
  */
 
 /*! @file death_handler.cc
@@ -53,6 +53,7 @@ TEST(DeathHandler, SimpleSIGSEGV) {
   int pipefd[2];
   assert(pipe(pipefd) == 0);
 
+  int lineno = __LINE__;
   int pid = fork();
   if (pid == 0) {
     close(pipefd[0]);
@@ -79,14 +80,17 @@ TEST(DeathHandler, SimpleSIGSEGV) {
   posstr = strstr(text, "death_handler");
   ASSERT_NE(static_cast<const char*>(NULL), posstr);
   // Warning: hard-coded line number
-  posstr = strstr(text, ":38");
+  posstr = strstr(text, ":");
   ASSERT_NE(static_cast<const char*>(NULL), posstr);
+  int rlineno = atoi(posstr + 1);
+  ASSERT_LT(rlineno - lineno - 7, 2);
 }
 
 TEST(DeathHandler, SimpleSIGSEGVWithoutColors) {
   int pipefd[2];
   assert(pipe(pipefd) == 0);
 
+  int lineno = __LINE__;
   int pid = fork();
   if (pid == 0) {
     close(pipefd[0]);
@@ -115,8 +119,10 @@ TEST(DeathHandler, SimpleSIGSEGVWithoutColors) {
   posstr = strstr(text, "death_handler");
   ASSERT_NE(static_cast<const char*>(NULL), posstr);
   // Warning: hard-coded line number
-  posstr = strstr(text, ":38");
+  posstr = strstr(text, ":");
   ASSERT_NE(static_cast<const char*>(NULL), posstr);
+  int glineno = atoi(posstr + 1);
+  ASSERT_LT(glineno - lineno - 7, 2);
 }
 
 TEST(DeathHandler, SimpleSIGABRT) {
@@ -207,4 +213,4 @@ TEST(DeathHandler, Threading) {
   }, ".*testing::UnitTest::Run\\(\\).*");
 }*/
 
-#include "tests/google/src/gtest_main.cc"
+#include "src/gtest_main.cc"
