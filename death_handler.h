@@ -57,14 +57,16 @@
 #include <stddef.h>
 
 // We have to override malloc() and free()
-#ifdef __linux__
 extern "C" {
+void* __malloc_impl(size_t size);
+#ifdef __linux__
 void* malloc(size_t size) throw();
 void free(void* ptr) throw();
-}
 #elif defined(__APPLE__)
-// TODO(v.markovtsev) malloc_default_zone()
+void* __malloc_zone(struct _malloc_zone_t* zone, size_t size);
+void __free_zone(struct _malloc_zone_t* zone, void* ptr);
 #endif
+}
 
 #ifdef __linux__
 // Comment this out on systems without quick_exit()
@@ -206,16 +208,21 @@ class DeathHandler {
   void set_thread_safe(bool value);
 
  private:
+  friend void* ::__malloc_impl(size_t);
 #ifdef __linux__
-  friend void* ::malloc(size_t size) throw();
-  friend void ::free(void *ptr) throw();
+  friend void* ::malloc(size_t) throw();
+  friend void ::free(void*) throw();
+#elif defined(__APPLE__)
+  friend void* ::__malloc_zone(struct _malloc_zone_t*, size_t);
+  friend void ::__free_zone(struct _malloc_zone_t*, void*);
 #endif
+  static void* malloc_;
+  static void* free_;
+
   /// @brief The size of the preallocated memory to use in the signal handler.
   static const size_t kNeededMemory;
 
   static void SignalHandler(int sig, void* info, void* secret);
-  static void* malloc_;
-  static void* free_;
   /// @brief Used to workaround backtrace() usage of malloc().
   static bool heap_trap_active_;
   static bool generate_core_dump_;

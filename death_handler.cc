@@ -51,6 +51,10 @@
 #define _GNU_SOURCE
 #endif
 #include <dlfcn.h>
+#ifdef __APPLE__
+#include <malloc/malloc.h>
+#include <sys/mman.h>
+#endif
 
 #define INLINE __attribute__((always_inline)) inline
 
@@ -60,25 +64,29 @@ namespace Safe {
 }  // namespace Safe
 }  // namespace Debug
 
-#ifdef __linux__
 extern "C" {
+
+void* __malloc_impl(size_t size) {
+    char* malloc_buffer =
+        Debug::DeathHandler::memory_ + Debug::DeathHandler::kNeededMemory - 512;
+    if (size > 512U) {
+      const char* msg = "malloc() replacement function should not return "
+          "a memory block larger than 512 bytes\n";
+      Debug::Safe::print2stderr(msg, strlen(msg) + 1);
+      _Exit(EXIT_FAILURE);
+    }
+    return malloc_buffer;
+}
+
+#ifdef __linux__
 void* malloc(size_t size) throw() {
-  // write(STDOUT_FILENO, "malloc\n", 7);
   if (!Debug::DeathHandler::heap_trap_active_) {
     if (!Debug::DeathHandler::malloc_) {
       Debug::DeathHandler::malloc_ = dlsym(RTLD_NEXT, "malloc");
     }
     return ((void*(*)(size_t))Debug::DeathHandler::malloc_)(size);
   }
-  char* malloc_buffer =
-      Debug::DeathHandler::memory_ + Debug::DeathHandler::kNeededMemory - 512;
-  if (size > 512U) {
-    const char* msg = "malloc() replacement function should not return "
-        "a memory block larger than 512 bytes\n";
-    Debug::Safe::print2stderr(msg, strlen(msg) + 1);
-    _Exit(EXIT_FAILURE);
-  }
-  return malloc_buffer;
+  return __malloc_impl(size);
 }
 
 void free(void* ptr) throw() {
@@ -90,10 +98,26 @@ void free(void* ptr) throw() {
   }
   // no-op
 }
-}  // extern "C"
-#endif // #ifdef __linux__
+#elif defined(__APPLE__)
+void* __malloc_zone(struct _malloc_zone_t* zone, size_t size) {
+  if (!Debug::DeathHandler::heap_trap_active_) {
+     return ((void*(*)(struct _malloc_zone_t*, size_t))
+         Debug::DeathHandler::malloc_)(zone, size);
+  }
+  return __malloc_impl(size);
+}
 
-#pragma GCC poison malloc realloc free backtrace_symbols \
+void __free_zone(struct _malloc_zone_t* zone, void *ptr) {
+  if (!Debug::DeathHandler::heap_trap_active_) {
+    return ((void(*)(struct _malloc_zone_t*, void*))
+         Debug::DeathHandler::free_)(zone, ptr);
+  }
+  // no-op
+}
+#endif // #ifdef __linux__
+}  // extern "C"
+
+#pragma GCC poison realloc backtrace_symbols \
   printf fprintf sprintf snprintf scanf sscanf  // NOLINT(runtime/printf)
 
 #define checked(x) do { if ((x) <= 0) _Exit(EXIT_FAILURE); } while (false)
@@ -208,6 +232,19 @@ DeathHandler::DeathHandler(bool altstack) {
   if (sigaction(SIGFPE, &sa, NULL) < 0) {
     perror("DeathHandler - sigaction(SIGFPE)");
   }
+  #ifdef __APPLE__
+  malloc_zone_t* zone = malloc_default_zone();
+  if (!zone) {
+    Safe::print2stderr("Failed to override malloc() and free()");
+    return;
+  }
+  malloc_ = reinterpret_cast<void*>(zone->malloc);
+  free_ = reinterpret_cast<void*>(zone->free);
+  mprotect(zone, sizeof(*zone), PROT_READ | PROT_WRITE);
+  zone->malloc = __malloc_zone;
+  zone->free = __free_zone;
+  mprotect(zone, sizeof(*zone), PROT_READ);
+  #endif
 }
 
 DeathHandler::~DeathHandler() {
@@ -231,6 +268,14 @@ DeathHandler::~DeathHandler() {
   sa.sa_handler = SIG_DFL;
   sigaction(SIGFPE, &sa, NULL);
   delete[] memory_;
+
+  #ifdef __APPLE__
+  malloc_zone_t* zone = malloc_default_zone();
+  mprotect(zone, sizeof(*zone), PROT_READ | PROT_WRITE);
+  zone->malloc = (void*(*)(struct _malloc_zone_t*, size_t))malloc_;
+  zone->free = (void(*)(struct _malloc_zone_t*, void*))free_;
+  mprotect(zone, sizeof(*zone), PROT_READ);
+  #endif
 }
 
 bool DeathHandler::generate_core_dump() {
