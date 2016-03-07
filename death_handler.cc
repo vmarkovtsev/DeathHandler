@@ -124,7 +124,8 @@ namespace Safe {
   }
 }  // namespace Safe
 
-const size_t DeathHandler::kNeededMemory = 12288;
+const size_t DeathHandler::kNeededMemory = 16384;
+const size_t DeathHandler::kStackMemory = 4000;
 bool DeathHandler::generate_core_dump_ = true;
 bool DeathHandler::cleanup_ = true;
 #ifdef QUICK_EXIT
@@ -144,16 +145,35 @@ DeathHandler::DeathHandler() {
   if (memory_ == NULL) {
     memory_ = new char[kNeededMemory];
   }
+  stack_t altstack;
+  altstack.ss_sp = memory_ + kNeededMemory - kStackMemory;
+  altstack.ss_size = kStackMemory;
+  altstack.ss_flags = 0;
+  if (sigaltstack(&altstack, NULL) < 0) {
+    perror("DeathHandler - sigaltstack");
+  }
   struct sigaction sa;
   sa.sa_sigaction = (sa_sigaction_handler)SignalHandler;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
-  sigaction(SIGSEGV, &sa, NULL);
-  sigaction(SIGABRT, &sa, NULL);  
-  sigaction(SIGFPE, &sa, NULL);
+  if (sigaction(SIGSEGV, &sa, NULL) < 0) {
+    perror("DeathHandler - sigaction(SIGSEGV)");
+  }
+  if (sigaction(SIGABRT, &sa, NULL) < 0) {
+    perror("DeathHandler - sigaction(SIGABBRT)");
+  }
+  if (sigaction(SIGFPE, &sa, NULL) < 0) {
+    perror("DeathHandler - sigaction(SIGFPE)");
+  }
 }
 
 DeathHandler::~DeathHandler() {
+  stack_t altstack;
+  altstack.ss_sp = NULL;
+  altstack.ss_size = 0;
+  altstack.ss_flags = SS_DISABLE;
+  sigaltstack(&altstack, NULL);
+
   struct sigaction sa;
 
   sigaction(SIGSEGV, NULL, &sa);

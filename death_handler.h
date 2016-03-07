@@ -7,10 +7,10 @@
   modification, are permitted provided that the following conditions are met: 
 
   1. Redistributions of source code must retain the above copyright notice, this
-     list of conditions and the following disclaimer. 
+     list of conditions and the following disclaimer.
   2. Redistributions in binary form must reproduce the above copyright notice,
      this list of conditions and the following disclaimer in the documentation
-     and/or other materials provided with the distribution. 
+     and/or other materials provided with the distribution.
 
   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
   ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -22,7 +22,7 @@
   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  
+
  */
 
 /*! @file death_handler.h
@@ -33,7 +33,7 @@
  *  @license Simplified BSD License
  *  @copyright 2012 Samsung R&D Institute Russia
  */
- 
+
 /*! @mainpage SIGSEGV/SIGABRT handler which prints the debug stack trace.
  *  Example
  *  =======
@@ -193,6 +193,9 @@ class DeathHandler {
  private:
   /// @brief The size of the preallocated memory to use in the signal handler.
   static const size_t kNeededMemory;
+
+  /// @brief The size of the preallocated alternative signal handler stack (included into kNeededMemory).
+  static const size_t kStackMemory;
 
   static void SignalHandler(int sig, void* info, void* secret);
   static void* MallocHook(size_t size, const void* /* caller */);
