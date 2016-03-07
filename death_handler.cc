@@ -44,7 +44,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #ifndef _GNU_SOURCE
@@ -60,7 +59,7 @@
 
 namespace Debug {
 namespace Safe {
-  INLINE void print2stderr(const char *msg, size_t len = 0);
+  INLINE void print(const char *msg, size_t len = 0);
 }  // namespace Safe
 }  // namespace Debug
 
@@ -72,7 +71,7 @@ void* __malloc_impl(size_t size) {
     if (size > 512U) {
       const char* msg = "malloc() replacement function should not return "
           "a memory block larger than 512 bytes\n";
-      Debug::Safe::print2stderr(msg, strlen(msg) + 1);
+      Debug::DeathHandler::print(msg, strlen(msg) + 1);
       _Exit(EXIT_FAILURE);
     }
     return malloc_buffer;
@@ -117,7 +116,23 @@ void __free_zone(struct _malloc_zone_t* zone, void *ptr) {
 #endif // #ifdef __linux__
 }  // extern "C"
 
-#pragma GCC poison realloc backtrace_symbols \
+#ifdef __APPLE__
+static void SetMallocZone(malloc_zone_t* zone, void* malloc, void* free,
+                          void** zone_malloc = NULL, void** zone_free = NULL) {
+  if (zone_malloc) {
+    *zone_malloc = reinterpret_cast<void*>(zone->malloc);
+  }
+  if (zone_free) {
+    *zone_free = reinterpret_cast<void*>(zone->free);
+  }
+  mprotect(zone, sizeof(*zone), PROT_READ | PROT_WRITE);
+  zone->malloc = (void*(*)(struct _malloc_zone_t*, size_t))malloc;
+  zone->free = (void(*)(struct _malloc_zone_t*, void*))free;
+  mprotect(zone, sizeof(*zone), PROT_READ);
+}
+#endif
+
+#pragma GCC poison malloc realloc free backtrace_symbols \
   printf fprintf sprintf snprintf scanf sscanf  // NOLINT(runtime/printf)
 
 #define checked(x) do { if ((x) <= 0) _Exit(EXIT_FAILURE); } while (false)
@@ -177,13 +192,8 @@ namespace Safe {
     return result;
   }
 
-  /// @brief Reentrant printing to stderr.
-  INLINE void print2stderr(const char *msg, size_t len) {
-    if (len > 0) {
-      checked(write(STDERR_FILENO, msg, len));
-    } else {
-      checked(write(STDERR_FILENO, msg, strlen(msg)));
-    }
+  ssize_t write2stderr(const char* msg, size_t len) {
+    return write(STDERR_FILENO, msg, len);
   }
 }  // namespace Safe
 
@@ -203,6 +213,7 @@ char* DeathHandler::memory_ = NULL;
 void* DeathHandler::malloc_ = NULL;
 void* DeathHandler::free_ = NULL;
 bool DeathHandler::heap_trap_active_ = false;
+DeathHandler::OutputCallback DeathHandler::output_callback_ = Safe::write2stderr;
 
 typedef void (*sa_sigaction_handler) (int, siginfo_t *, void *);
 
@@ -216,11 +227,11 @@ DeathHandler::DeathHandler(bool altstack) {
     altstack.ss_size = MINSIGSTKSZ;
     altstack.ss_flags = 0;
     if (sigaltstack(&altstack, NULL) < 0) {
-      perror("DeathHandler - sigaltstack");
+      perror("DeathHandler - sigaltstack()");
     }
   }
   struct sigaction sa;
-  sa.sa_sigaction = (sa_sigaction_handler)SignalHandler;
+  sa.sa_sigaction = (sa_sigaction_handler)HandleSignal;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART | SA_SIGINFO | (altstack? SA_ONSTACK : 0);
   if (sigaction(SIGSEGV, &sa, NULL) < 0) {
@@ -235,19 +246,17 @@ DeathHandler::DeathHandler(bool altstack) {
   #ifdef __APPLE__
   malloc_zone_t* zone = malloc_default_zone();
   if (!zone) {
-    Safe::print2stderr("Failed to override malloc() and free()");
+    print("Failed to override malloc() and free()");
     return;
   }
-  malloc_ = reinterpret_cast<void*>(zone->malloc);
-  free_ = reinterpret_cast<void*>(zone->free);
-  mprotect(zone, sizeof(*zone), PROT_READ | PROT_WRITE);
-  zone->malloc = __malloc_zone;
-  zone->free = __free_zone;
-  mprotect(zone, sizeof(*zone), PROT_READ);
+  // Override malloc() and free()
+  SetMallocZone(zone, reinterpret_cast<void*>(__malloc_zone),
+                reinterpret_cast<void*>(__free_zone), &malloc_, &free_);
   #endif
 }
 
 DeathHandler::~DeathHandler() {
+  // Disable alternative signal handler stack
   stack_t altstack;
   altstack.ss_sp = NULL;
   altstack.ss_size = 0;
@@ -271,14 +280,19 @@ DeathHandler::~DeathHandler() {
 
   #ifdef __APPLE__
   malloc_zone_t* zone = malloc_default_zone();
-  mprotect(zone, sizeof(*zone), PROT_READ | PROT_WRITE);
-  zone->malloc = (void*(*)(struct _malloc_zone_t*, size_t))malloc_;
-  zone->free = (void(*)(struct _malloc_zone_t*, void*))free_;
-  mprotect(zone, sizeof(*zone), PROT_READ);
+  SetMallocZone(zone, malloc_, free_);
   #endif
 }
 
-bool DeathHandler::generate_core_dump() {
+void DeathHandler::print(const char* msg, size_t len) {
+  if (len > 0) {
+    checked(output_callback_(msg, len));
+  } else {
+    checked(output_callback_(msg, strlen(msg)));
+  }
+}
+
+bool DeathHandler::generate_core_dump() const {
   return generate_core_dump_;
 }
 
@@ -286,7 +300,7 @@ void DeathHandler::set_generate_core_dump(bool value) {
   generate_core_dump_ = value;
 }
 
-bool DeathHandler::cleanup() {
+bool DeathHandler::cleanup() const {
   return cleanup_;
 }
 
@@ -295,7 +309,7 @@ void DeathHandler::set_cleanup(bool value) {
 }
 
 #ifdef QUICK_EXIT
-bool DeathHandler::quick_exit() {
+bool DeathHandler::quick_exit() const {
   return quick_exit_;
 }
 
@@ -304,7 +318,7 @@ void DeathHandler::set_quick_exit(bool value) {
 }
 #endif
 
-int DeathHandler::frames_count() {
+int DeathHandler::frames_count() const {
   return frames_count_;
 }
 
@@ -313,7 +327,7 @@ void DeathHandler::set_frames_count(int value) {
   frames_count_ = value;
 }
 
-bool DeathHandler::cut_common_path_root() {
+bool DeathHandler::cut_common_path_root() const {
   return cut_common_path_root_;
 }
 
@@ -321,7 +335,7 @@ void DeathHandler::set_cut_common_path_root(bool value) {
   cut_common_path_root_ = value;
 }
 
-bool DeathHandler::cut_relative_paths() {
+bool DeathHandler::cut_relative_paths() const {
   return cut_relative_paths_;
 }
 
@@ -329,7 +343,7 @@ void DeathHandler::set_cut_relative_paths(bool value) {
   cut_relative_paths_ = value;
 }
 
-bool DeathHandler::append_pid() {
+bool DeathHandler::append_pid() const {
   return append_pid_;
 }
 
@@ -337,7 +351,7 @@ void DeathHandler::set_append_pid(bool value) {
   append_pid_ = value;
 }
 
-bool DeathHandler::color_output() {
+bool DeathHandler::color_output() const {
   return color_output_;
 }
 
@@ -345,12 +359,20 @@ void DeathHandler::set_color_output(bool value) {
   color_output_ = value;
 }
 
-bool DeathHandler::thread_safe() {
+bool DeathHandler::thread_safe() const {
   return thread_safe_;
 }
 
 void DeathHandler::set_thread_safe(bool value) {
   thread_safe_ = value;
+}
+
+DeathHandler::OutputCallback DeathHandler::output_callback() const {
+  return output_callback_;
+}
+
+void DeathHandler::set_output_callback(DeathHandler::OutputCallback value) {
+  output_callback_ = value;
 }
 
 INLINE static void safe_abort() {
@@ -429,7 +451,7 @@ static char *addr2line(const char *image, void *addr, bool color_output,
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
-void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
+void DeathHandler::HandleSignal(int sig, void * /* info */, void *secret) {
   // Stop all other running threads by forking
   pid_t forkedPid = fork();
   if (forkedPid != 0) {
@@ -468,7 +490,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
   ucontext_t *uc = reinterpret_cast<ucontext_t *>(secret);
 
   if (dup2(STDERR_FILENO, STDOUT_FILENO) == -1) {  // redirect stdout to stderr
-    Safe::print2stderr("Failed to redirect stdout to stderr\n");
+    print("Failed to redirect stdout to stderr\n");
   }
   char* memory = memory_;
   {
@@ -519,10 +541,10 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
       strcat(msg, "\033[0m");  // NOLINT(runtime/printf)
     }
     strcat(msg, ")");  // NOLINT(runtime/printf)
-    Safe::print2stderr(msg);
+    print(msg);
   }
 
-  Safe::print2stderr("\nStack trace:\n");
+  print("\nStack trace:\n");
   void **trace = reinterpret_cast<void**>(memory);
   memory += (frames_count_ + 2) * sizeof(void*);
   // Workaround malloc() inside backtrace()
@@ -612,7 +634,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
           }
           strcat(msg, "\n");  // NOLINT(runtime/printf)
         }
-        Safe::print2stderr(msg);
+        print(msg);
       }
       line = function_name_end + 1;
 
@@ -675,7 +697,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
     }
 
     strcat(line, "\n");  // NOLINT(runtime/printf)
-    Safe::print2stderr(line);
+    print(line);
   }
 
   // Write '\0' to indicate the end of the output
@@ -686,7 +708,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
   for (int i = 0; i < trace_size; i++) {
     Safe::ptoa(trace[i], memory);
     strcat(memory, "\n");
-    Safe::print2stderr(memory);
+    print(memory);
   }
 #endif
   if (thread_safe_) {
