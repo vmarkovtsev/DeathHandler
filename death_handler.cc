@@ -60,9 +60,10 @@ namespace Safe {
 }  // namespace Safe
 }  // namespace Debug
 
+#ifdef __linux__
 extern "C" {
 void* malloc(size_t size) throw() {
-    write(STDOUT_FILENO, "malloc\n", 7);
+  // write(STDOUT_FILENO, "malloc\n", 7);
   if (!Debug::DeathHandler::heap_trap_active_) {
     if (!Debug::DeathHandler::malloc_) {
       Debug::DeathHandler::malloc_ = dlsym(RTLD_NEXT, "malloc");
@@ -90,6 +91,7 @@ void free(void* ptr) throw() {
   // no-op
 }
 }  // extern "C"
+#endif // #ifdef __linux__
 
 #pragma GCC poison malloc realloc free backtrace_symbols \
   printf fprintf sprintf snprintf scanf sscanf  // NOLINT(runtime/printf)
@@ -136,7 +138,7 @@ namespace Safe {
     int i;
     res[res_max_length - 1] = 0;
     for (i = res_max_length - 2; val != 0 && i != 0; i--, val /= base) {
-      res[i] = "0123456789ABCDEF"[val % base];
+      res[i] = "0123456789abcdef"[val % base];
     }
     return &res[i + 1];
   }
@@ -180,21 +182,23 @@ bool DeathHandler::heap_trap_active_ = false;
 
 typedef void (*sa_sigaction_handler) (int, siginfo_t *, void *);
 
-DeathHandler::DeathHandler() {
+DeathHandler::DeathHandler(bool altstack) {
   if (memory_ == NULL) {
-    memory_ = new char[kNeededMemory + MINSIGSTKSZ];
+    memory_ = new char[kNeededMemory + (altstack? MINSIGSTKSZ : 0)];
   }
-  stack_t altstack;
-  altstack.ss_sp = memory_ + kNeededMemory;
-  altstack.ss_size = MINSIGSTKSZ;
-  altstack.ss_flags = 0;
-  //if (sigaltstack(&altstack, NULL) < 0) {
-  //  perror("DeathHandler - sigaltstack");
-  //}
+  if (altstack) {
+    stack_t altstack;
+    altstack.ss_sp = memory_ + kNeededMemory;
+    altstack.ss_size = MINSIGSTKSZ;
+    altstack.ss_flags = 0;
+    if (sigaltstack(&altstack, NULL) < 0) {
+      perror("DeathHandler - sigaltstack");
+    }
+  }
   struct sigaction sa;
   sa.sa_sigaction = (sa_sigaction_handler)SignalHandler;
   sigemptyset(&sa.sa_mask);
-  sa.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
+  sa.sa_flags = SA_RESTART | SA_SIGINFO | (altstack? SA_ONSTACK : 0);
   if (sigaction(SIGSEGV, &sa, NULL) < 0) {
     perror("DeathHandler - sigaction(SIGSEGV)");
   }
@@ -456,7 +460,7 @@ void DeathHandler::SignalHandler(int sig, void * /* info */, void *secret) {
   #ifndef __APPLE__
     strcat(msg, Safe::utoa(pthread_self(), msg + msg_max_length));  // NOLINT(*)
   #else
-    strcat(msg, Safe::utoa(reinterpret_cast<uint64_t>(pthread_self()), msg + msg_max_length));  // NOLINT(*)
+    strcat(msg, Safe::ptoa(pthread_self(), msg + msg_max_length));  // NOLINT(*)
   #endif
     if (color_output_) {
       strcat(msg, "\033[0m");  // NOLINT(runtime/printf)

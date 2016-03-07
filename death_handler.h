@@ -57,10 +57,14 @@
 #include <stddef.h>
 
 // We have to override malloc() and free()
+#ifdef __linux__
 extern "C" {
 void* malloc(size_t size) throw();
 void free(void* ptr) throw();
 }
+#elif defined(__APPLE__)
+// TODO(v.markovtsev) malloc_default_zone()
+#endif
 
 #ifdef __linux__
 // Comment this out on systems without quick_exit()
@@ -82,8 +86,11 @@ namespace Debug {
 /// the same time.
 class DeathHandler {
  public:
-  /// @brief Installs the SIGSEGV/SIGABRT signal handler.
-  DeathHandler();
+  /// @brief Installs the SIGSEGV/etc. signal handler.
+  /// @param altstack If true, allocate and use a dedicated signal handler stack.
+  /// backtrace() will report nothing then, but the handler will survive a stack
+  /// overflow.
+  DeathHandler(bool altstack = false);
   /// @brief This is called on normal program termination. Previously installed
   /// SIGSEGV and SIGABRT signal handlers are removed.
   ~DeathHandler();
@@ -199,8 +206,10 @@ class DeathHandler {
   void set_thread_safe(bool value);
 
  private:
+#ifdef __linux__
   friend void* ::malloc(size_t size) throw();
   friend void ::free(void *ptr) throw();
+#endif
   /// @brief The size of the preallocated memory to use in the signal handler.
   static const size_t kNeededMemory;
 
