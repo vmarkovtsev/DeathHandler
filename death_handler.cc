@@ -65,6 +65,7 @@ namespace Safe {
 extern "C" {
 
 void* __malloc_impl(size_t size) {
+    assert(Debug::DeathHandler::memory_ != NULL);
     char* malloc_buffer =
         Debug::DeathHandler::memory_ + Debug::DeathHandler::kNeededMemory - 512;
     if (size > 512U) {
@@ -79,8 +80,12 @@ void* __malloc_impl(size_t size) {
 #ifdef __linux__
 void* malloc(size_t size) throw() {
   if (!Debug::DeathHandler::heap_trap_active_) {
-    if (!Debug::DeathHandler::malloc_) {
+    if (Debug::DeathHandler::malloc_ == NULL) {
+      // some dlsym implementations may use dynamic memory
+      // this should execute at program startup, so nevermind the thread safety
+      Debug::DeathHandler::heap_trap_active_ = true;
       Debug::DeathHandler::malloc_ = dlsym(RTLD_NEXT, "malloc");
+      Debug::DeathHandler::heap_trap_active_ = false;
     }
     return ((void*(*)(size_t))Debug::DeathHandler::malloc_)(size);
   }
@@ -89,8 +94,12 @@ void* malloc(size_t size) throw() {
 
 void free(void* ptr) throw() {
   if (!Debug::DeathHandler::heap_trap_active_) {
-    if (!Debug::DeathHandler::free_) {
+    if (Debug::DeathHandler::free_ == NULL) {
+      // some dlsym implementations may use dynamic memory
+      // this should execute at program startup, so nevermind the thread safety
+      Debug::DeathHandler::heap_trap_active_ = true;
       Debug::DeathHandler::free_ = dlsym(RTLD_NEXT, "free");
+      Debug::DeathHandler::heap_trap_active_ = false;
     }
     ((void(*)(void*))Debug::DeathHandler::free_)(ptr);
   }
@@ -196,7 +205,7 @@ namespace Safe {
   }
 }  // namespace Safe
 
-const size_t DeathHandler::kNeededMemory = 16384;
+const size_t DeathHandler::kNeededMemory = 1 << 16;
 bool DeathHandler::generate_core_dump_ = true;
 bool DeathHandler::cleanup_ = true;
 #ifdef QUICK_EXIT
@@ -208,7 +217,7 @@ bool DeathHandler::cut_relative_paths_ = true;
 bool DeathHandler::append_pid_ = false;
 bool DeathHandler::color_output_ = true;
 bool DeathHandler::thread_safe_ = true;
-char* DeathHandler::memory_ = NULL;
+char DeathHandler::memory_[1 << 16];  // static allocation of 64KiB
 void* DeathHandler::malloc_ = NULL;
 void* DeathHandler::free_ = NULL;
 bool DeathHandler::heap_trap_active_ = false;
@@ -217,9 +226,6 @@ DeathHandler::OutputCallback DeathHandler::output_callback_ = Safe::write2stderr
 typedef void (*sa_sigaction_handler) (int, siginfo_t *, void *);
 
 DeathHandler::DeathHandler(bool altstack) {
-  if (memory_ == NULL) {
-    memory_ = new char[kNeededMemory + (altstack? MINSIGSTKSZ : 0)];
-  }
   if (altstack) {
     stack_t altstack;
     altstack.ss_sp = memory_ + kNeededMemory;
@@ -275,7 +281,6 @@ DeathHandler::~DeathHandler() {
   sigaction(SIGFPE, NULL, &sa);
   sa.sa_handler = SIG_DFL;
   sigaction(SIGFPE, &sa, NULL);
-  delete[] memory_;
 
   #ifdef __APPLE__
   malloc_zone_t* zone = malloc_default_zone();

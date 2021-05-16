@@ -230,7 +230,8 @@ class DeathHandler {
   /// @brief Reentrant printing to stderr.
   inline static void print(const char* msg, size_t len = 0);
 
-  /// @brief The size of the preallocated memory to use in the signal handler.
+  /// @brief The size of the statically preallocated memory available for
+  /// the fallback shim malloc(). This value is readonly, apparently.
   static const size_t kNeededMemory;
 
   static void HandleSignal(int sig, void* info, void* secret);
@@ -253,7 +254,7 @@ class DeathHandler {
   static bool thread_safe_;
   static OutputCallback output_callback_;
   /// @brief The preallocated memory to use in the signal handler.
-  static char* memory_;
+  static char memory_[];
 };
 
 }  // namespace Debug

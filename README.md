@@ -1,4 +1,4 @@
-DeathHandler class installs SEGFAULT, SIGABRT and SIGFPE signal handlers to print
+DeathHandler C++03+ class installs SEGFAULT, SIGABRT and SIGFPE signal handlers to print
 a nice stack trace and (if requested) generate a core dump.
 In DeathHandler's constructor, signal handlers
 are installed through `sigaction()`. If your program encounters a segmentation
