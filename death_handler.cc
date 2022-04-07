@@ -706,7 +706,8 @@ void DeathHandler::HandleSignal(int sig, void * /* info */, void *secret) {
 
   // Write '\0' to indicate the end of the output
   char end = '\0';
-  write(STDERR_FILENO, &end, 1);
+  ssize_t ret = write(STDERR_FILENO, &end, 1);
+  (void)ret;
 
 #elif defined(__APPLE__)
   for (int i = 0; i < trace_size; i++) {
